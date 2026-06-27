@@ -3,111 +3,106 @@ import { Link, useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
-import { useLanguage } from '../../context/LanguageContext';
-import { LogIn } from 'lucide-react';
+import { LogIn, BookOpen, Eye, EyeOff } from 'lucide-react';
 
 export default function Login() {
-  const { t } = useLanguage();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Special role check based on requirements
-  const checkSpecialRoles = async (login, pass) => {
-    if (login === 'LSL' && pass === 'Teachers') {
-      // Simulate teacher login - In a real app we'd need a real firebase user for this
-      // For the sake of this prompt, we'll login to a pre-created teacher account or show how it works
-      // But we must use Firebase Auth. The user requested LSL / Teachers. 
-      // We can create a dummy email for LSL like lsl@ilmfan.uz
-      return { email: 'lsl@ilmfan.uz', pass: 'Teachers' };
-    }
-    if (login === 'ADMIN' && pass === 'Admin2025') {
-      return { email: 'admin@ilmfan.uz', pass: 'Admin2025' };
-    }
-    // Normal email login
-    return { email: login, pass };
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      const credentials = await checkSpecialRoles(email, password);
-      
-      // Attempt Firebase login
-      const userCredential = await signInWithEmailAndPassword(auth, credentials.email, credentials.pass);
-      
-      // Get role
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-      if (userDoc.exists()) {
-        const role = userDoc.data().role;
-        if (role === 'admin') navigate('/admin');
-        else if (role === 'teacher') navigate('/teacher');
-        else navigate('/');
-      } else {
-        navigate('/');
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Login yoki parol xato!');
-    } finally {
-      setLoading(false);
+      let loginEmail = email;
+      if (!email.includes('@')) loginEmail = `${email}@ilmfan.uz`;
+
+      const cred = await signInWithEmailAndPassword(auth, loginEmail, password);
+      const snap = await getDoc(doc(db, 'users', cred.user.uid));
+      const role = snap.exists() ? snap.data().role : 'student';
+      if (role === 'admin') navigate('/admin');
+      else if (role === 'teacher') navigate('/teacher');
+      else navigate('/');
+    } catch {
+      setError("Login yoki parol xato!");
     }
+    setLoading(false);
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-950">
-      <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <div className="p-3 bg-blue-500/20 text-blue-500 rounded-full mb-4">
-            <LogIn size={32} />
+    <div className="min-h-screen flex items-center justify-center px-4 relative" style={{ background: '#05080f' }}>
+      <div className="stars-bg" />
+      <div className="floating-shape bg-blue-500" style={{ width: 400, height: 400, top: '-10%', right: '-10%', opacity: 0.08 }} />
+      <div className="floating-shape bg-purple-500" style={{ width: 300, height: 300, bottom: '-5%', left: '-5%', opacity: 0.08, animationDelay: '-8s' }} />
+
+      <div className="glass-panel rounded-3xl p-8 w-full max-w-md relative z-10 slide-up">
+        <div className="text-center mb-8">
+          <div className="inline-flex p-4 rounded-2xl mb-4 neon-blue" style={{ background: 'linear-gradient(135deg,#00d4ff22,#00d4ff08)', border: '1px solid rgba(0,212,255,0.3)' }}>
+            <BookOpen size={32} style={{ color: '#00d4ff' }} />
           </div>
-          <h2 className="text-2xl font-bold text-white">{t('login')}</h2>
+          <h1 className="text-2xl font-bold gradient-text mb-1" style={{ fontFamily: 'Space Grotesk' }}>IlmFan</h1>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Platformaga xush kelibsiz</p>
         </div>
 
-        {error && <div className="bg-red-500/20 text-red-400 p-3 rounded-lg mb-4 text-center">{error}</div>}
+        {error && (
+          <div className="mb-4 p-3 rounded-xl text-sm text-center" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('email')}</label>
-            <input 
-              type="text" 
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Login yoki Email</label>
+            <input
+              className="input-field"
+              type="text"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-              placeholder="Foydalanuvchi nomi yoki Email"
-              required 
+              onChange={e => setEmail(e.target.value)}
+              placeholder="login yoki email@..."
+              required
+              id="login-email"
             />
           </div>
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('password')}</label>
-            <input 
-              type="password" 
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-              placeholder="••••••••"
-              required 
-            />
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Parol</label>
+            <div className="relative">
+              <input
+                className="input-field pr-10"
+                type={showPass ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                id="login-password"
+              />
+              <button type="button" onClick={() => setShowPass(!showPass)}
+                className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }}>
+                {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
-          
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg transition-colors flex justify-center items-center h-10"
+            className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2"
+            id="login-submit"
           >
-            {loading ? <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div> : t('login')}
+            {loading
+              ? <span style={{ display:'inline-block',width:18,height:18,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'white',animation:'spin 0.8s linear infinite'}} />
+              : <><LogIn size={18} /> Kirish</>}
           </button>
         </form>
 
-        <div className="mt-6 text-center text-slate-400 text-sm">
-          {t('no_account')} <Link to="/register" className="text-blue-500 hover:underline">{t('register_here')}</Link>
-        </div>
+        <p className="text-center text-sm mt-6" style={{ color: 'var(--text-muted)' }}>
+          Akkaunt yo'qmi?{' '}
+          <Link to="/register" className="font-medium" style={{ color: '#00d4ff' }}>Ro'yxatdan o'tish</Link>
+        </p>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

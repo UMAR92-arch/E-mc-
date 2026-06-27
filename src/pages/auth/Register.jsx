@@ -2,166 +2,148 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../firebase/config';
-import { doc, setDoc } from 'firebase/firestore';
-import { useLanguage } from '../../context/LanguageContext';
-import { UserPlus } from 'lucide-react';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { UserPlus, BookOpen } from 'lucide-react';
+
+const REGIONS = [
+  'Toshkent shahar','Toshkent viloyati','Andijon viloyati','Buxoro viloyati',
+  'Farg\'ona viloyati','Jizzax viloyati','Xorazm viloyati','Namangan viloyati',
+  'Navoiy viloyati','Qashqadaryo viloyati','Qoraqalpog\'iston Respublikasi',
+  'Samarqand viloyati','Sirdaryo viloyati','Surxondaryo viloyati'
+];
+const GRADES = Array.from({ length: 11 }, (_, i) => i + 1);
 
 export default function Register() {
-  const { t } = useLanguage();
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    school: '',
-    region: '',
-    district: '',
-    phone: '',
-    age: '',
-    grade: '',
-    login: '', // email
-    password: ''
+  const [form, setForm] = useState({
+    firstName:'', lastName:'', school:'', region:'', district:'',
+    phone:'', age:'', grade:'', login:'', password:''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const regions = [
-    'Toshkent shahar', 'Toshkent viloyati', 'Andijon viloyati', 'Buxoro viloyati', 
-    'Fargʻona viloyati', 'Jizzax viloyati', 'Xorazm viloyati', 'Namangan viloyati', 
-    'Navoiy viloyati', 'Qashqadaryo viloyati', 'Qoraqalpogʻiston Respublikasi', 
-    'Samarqand viloyati', 'Sirdaryo viloyati', 'Surxondaryo viloyati'
-  ];
-  
-  const grades = Array.from({length: 11}, (_, i) => i + 1);
-
-  const handleChange = (e) => {
-    setFormData({...formData, [e.target.name]: e.target.value});
-  };
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      // Create user in Firebase Auth
-      // We use the provided login as email. Since Firebase requires email format,
-      // if they just type a word, we append a dummy domain like @ilmfan.uz
-      let userEmail = formData.login;
-      if (!userEmail.includes('@')) {
-        userEmail = `${userEmail}@ilmfan.uz`;
-      }
-
-      const userCredential = await createUserWithEmailAndPassword(auth, userEmail, formData.password);
-      const user = userCredential.user;
-
-      // Save additional user info in Firestore
-      await setDoc(doc(db, 'users', user.uid), {
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        school: formData.school,
-        region: formData.region,
-        district: formData.district,
-        phone: formData.phone || '',
-        age: parseInt(formData.age),
-        grade: parseInt(formData.grade),
-        role: 'student',
-        streak: 0,
-        points: 0,
-        badges: [],
-        createdAt: new Date().toISOString()
+      let email = form.login.includes('@') ? form.login : `${form.login}@ilmfan.uz`;
+      const cred = await createUserWithEmailAndPassword(auth, email, form.password);
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        firstName: form.firstName, lastName: form.lastName,
+        school: form.school, region: form.region, district: form.district,
+        phone: form.phone || '', age: Number(form.age), grade: Number(form.grade),
+        role: 'student', streak: 0, points: 0, badges: [],
+        createdAt: serverTimestamp()
       });
-
-      navigate('/'); // Redirect to home (which is now protected)
+      navigate('/');
     } catch (err) {
-      console.error(err);
-      setError("Ro'yxatdan o'tishda xatolik yuz berdi. Login band bo'lishi mumkin yoki parol juda qisqa (kamida 6 ta belgi).");
-    } finally {
-      setLoading(false);
+      if (err.code === 'auth/email-already-in-use') setError('Bu login band!');
+      else if (err.code === 'auth/weak-password') setError('Parol kamida 6 ta belgi bo\'lishi kerak!');
+      else setError("Ro'yxatdan o'tishda xatolik yuz berdi.");
     }
+    setLoading(false);
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-slate-950 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-xl w-full max-w-2xl">
-        <div className="flex flex-col items-center mb-8">
-          <div className="p-3 bg-blue-500/20 text-blue-500 rounded-full mb-4">
-            <UserPlus size={32} />
+    <div className="min-h-screen flex items-center justify-center px-4 py-12 relative" style={{ background: '#05080f' }}>
+      <div className="stars-bg" />
+      <div className="floating-shape bg-green-500" style={{ width: 350, height: 350, top: '-5%', left: '-5%', opacity: 0.08 }} />
+      <div className="floating-shape bg-blue-500" style={{ width: 300, height: 300, bottom: '-5%', right: '-5%', opacity: 0.08, animationDelay: '-10s' }} />
+
+      <div className="glass-panel rounded-3xl p-8 w-full max-w-2xl relative z-10 slide-up">
+        <div className="text-center mb-8">
+          <div className="inline-flex p-4 rounded-2xl mb-4" style={{ background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.3)' }}>
+            <UserPlus size={30} style={{ color: '#00ff88' }} />
           </div>
-          <h2 className="text-2xl font-bold text-white">{t('create_account')}</h2>
+          <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: 'Space Grotesk' }}>
+            <span className="gradient-text">IlmFan</span> — Ro'yxatdan o'tish
+          </h1>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>O'quvchi sifatida qo'shiling</p>
         </div>
 
-        {error && <div className="bg-red-500/20 text-red-400 p-3 rounded-lg mb-6 text-center">{error}</div>}
+        {error && (
+          <div className="mb-5 p-3 rounded-xl text-sm text-center"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}>
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleRegister} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('first_name')}</label>
-            <input type="text" name="firstName" value={formData.firstName} onChange={handleChange} required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
-          </div>
-          <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('last_name')}</label>
-            <input type="text" name="lastName" value={formData.lastName} onChange={handleChange} required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
-          </div>
+          {[
+            { label: 'Ism', key: 'firstName', type: 'text', placeholder: 'Ismingiz' },
+            { label: 'Familiya', key: 'lastName', type: 'text', placeholder: 'Familiyangiz' },
+          ].map(f => (
+            <div key={f.key}>
+              <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>{f.label}</label>
+              <input className="input-field" type={f.type} placeholder={f.placeholder}
+                value={form[f.key]} onChange={e => set(f.key, e.target.value)} required />
+            </div>
+          ))}
+
           <div className="md:col-span-2">
-            <label className="block text-slate-400 mb-1 text-sm">{t('school')}</label>
-            <input type="text" name="school" value={formData.school} onChange={handleChange} required placeholder="Masalan: 1-IDUM"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Maktab</label>
+            <input className="input-field" placeholder="Masalan: 1-IDUM" value={form.school} onChange={e => set('school', e.target.value)} required />
           </div>
+
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('region')}</label>
-            <select name="region" value={formData.region} onChange={handleChange} required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
-              <option value="">{t('select_region')}</option>
-              {regions.map(r => <option key={r} value={r}>{r}</option>)}
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Viloyat</label>
+            <select className="input-field" value={form.region} onChange={e => set('region', e.target.value)} required>
+              <option value="">Viloyat tanlang</option>
+              {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('district')}</label>
-            <input type="text" name="district" value={formData.district} onChange={handleChange} required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Tuman</label>
+            <input className="input-field" placeholder="Tuman..." value={form.district} onChange={e => set('district', e.target.value)} required />
           </div>
+
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('age')}</label>
-            <input type="number" name="age" min="6" max="100" value={formData.age} onChange={handleChange} required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Yosh</label>
+            <input className="input-field" type="number" min="6" max="100" value={form.age} onChange={e => set('age', e.target.value)} required />
           </div>
+
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('grade')}</label>
-            <select name="grade" value={formData.grade} onChange={handleChange} required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors">
-              <option value="">{t('select_grade')}</option>
-              {grades.map(g => <option key={g} value={g}>{g}-sinf</option>)}
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Sinf</label>
+            <select className="input-field" value={form.grade} onChange={e => set('grade', e.target.value)} required>
+              <option value="">Sinf tanlang</option>
+              {GRADES.map(g => <option key={g} value={g}>{g}-sinf</option>)}
             </select>
           </div>
+
           <div className="md:col-span-2">
-            <label className="block text-slate-400 mb-1 text-sm">Telefon raqam (Ixtiyoriy)</label>
-            <input type="text" name="phone" value={formData.phone} onChange={handleChange} placeholder="+998 90 123 45 67"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Telefon (ixtiyoriy)</label>
+            <input className="input-field" placeholder="+998 90 123 45 67" value={form.phone} onChange={e => set('phone', e.target.value)} />
           </div>
+
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">Login (O'zingiz o'ylab toping)</label>
-            <input type="text" name="login" value={formData.login} onChange={handleChange} required
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Login (o'zingiz o'ylab toping)</label>
+            <input className="input-field" value={form.login} onChange={e => set('login', e.target.value)} required placeholder="mylogin123" id="reg-login" />
           </div>
+
           <div>
-            <label className="block text-slate-400 mb-1 text-sm">{t('password')} (Kamida 6 belgi)</label>
-            <input type="password" name="password" value={formData.password} onChange={handleChange} required minLength="6"
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors" />
+            <label className="block text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>Parol (min 6 belgi)</label>
+            <input className="input-field" type="password" value={form.password} onChange={e => set('password', e.target.value)} required minLength={6} placeholder="••••••••" id="reg-password" />
           </div>
-          
-          <div className="md:col-span-2 mt-4">
-            <button type="submit" disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors flex justify-center items-center h-12">
-              {loading ? <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div> : t('create_account')}
+
+          <div className="md:col-span-2 mt-2">
+            <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-3" id="reg-submit">
+              {loading
+                ? <span style={{ display:'inline-block',width:18,height:18,borderRadius:'50%',border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'white',animation:'spin 0.8s linear infinite'}} />
+                : <><UserPlus size={18} /> Ro'yxatdan o'tish</>}
             </button>
           </div>
         </form>
 
-        <div className="mt-6 text-center text-slate-400 text-sm">
-          {t('have_account')} <Link to="/login" className="text-blue-500 hover:underline">{t('login_here')}</Link>
-        </div>
+        <p className="text-center text-sm mt-5" style={{ color: 'var(--text-muted)' }}>
+          Akkauntingiz bormi?{' '}
+          <Link to="/login" style={{ color: '#00d4ff' }} className="font-medium">Kirish</Link>
+        </p>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
