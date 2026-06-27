@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db, auth } from '../firebase/config';
 import {
-  collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, orderBy, where
+  collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, orderBy, where, deleteDoc
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, updateEmail } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, updateEmail, deleteUser } from 'firebase/auth';
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, ClipboardList,
   Settings, LogOut, Home, Plus, X, TrendingUp, UserCheck, Activity, Search
@@ -75,11 +75,15 @@ export default function AdminPanel() {
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState('');
 
-  // Yangi qo'shilgan state'lar
   const [selectedTeacher, setSelectedTeacher] = useState(null);
   const [showTeacherDetails, setShowTeacherDetails] = useState(false);
   const [credForm, setCredForm] = useState({ adminPassword: '', newEmail: '', newPassword: '' });
   const [credLoading, setCredLoading] = useState(false);
+  
+  // O'chirish uchun statelar
+  const [deleteStep, setDeleteStep] = useState(0); 
+  const [deleteAdminPass, setDeleteAdminPass] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const unUsers = onSnapshot(collection(db, 'users'), snap => {
@@ -172,6 +176,49 @@ export default function AdminPanel() {
       }
     }
     setCredLoading(false);
+  };
+
+  const handleDeleteUser = async (e) => {
+    e.preventDefault();
+    if (!deleteAdminPass) return notify("❌ Admin parolini kiriting!");
+    setDeleteLoading(true);
+    const adminEmail = auth.currentUser.email;
+
+    try {
+      // 1. Admin parolini tasdiqlash uchun admin bo'lib qayta kiramiz
+      await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
+      
+      // 2. O'qituvchining hozirgi paroli bilan uning profiliga yashirincha kiramiz
+      const oldPassword = selectedTeacher.password;
+      if (!oldPassword) throw new Error("O'qituvchining oldingi paroli bazada topilmadi. Firebase Auth orqali o'chirib bo'lmaydi.");
+      
+      await signInWithEmailAndPassword(auth, selectedTeacher.email, oldPassword);
+      
+      // 3. Foydalanuvchini Auth dan o'chiramiz
+      await deleteUser(auth.currentUser);
+      
+      // 4. Firestore dan o'chiramiz
+      await deleteDoc(doc(db, 'users', selectedTeacher.id));
+      await deleteDoc(doc(db, 'teachers', selectedTeacher.id));
+      
+      // 5. Adminga qaytamiz
+      await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
+      
+      notify("✅ Akkaunt butunlay o'chirib yuborildi!");
+      setShowTeacherDetails(false);
+      setSelectedTeacher(null);
+      setDeleteStep(0);
+      setDeleteAdminPass('');
+    } catch (err) {
+      console.error(err);
+      notify("❌ Xatolik: " + err.message);
+      try {
+        if (auth.currentUser?.email !== adminEmail) {
+          await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
+        }
+      } catch (e) {}
+    }
+    setDeleteLoading(false);
   };
 
   const filteredStudents = students.filter(s =>
@@ -414,6 +461,43 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {/* QUESTIONS */}
+        {activeTab === 'questions' && (
+          <div className="fade-in-up">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-3xl font-bold gradient-text-purple mb-1" style={{ fontFamily: 'Space Grotesk' }}>Barcha Savollar va Maslahatlar</h2>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Butun saytdan kelib tushgan barcha savollar va muhokamalar</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {questions.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">Hech qanday savol yo'q.</div>
+              ) : (
+                questions.map(q => {
+                  const sub = SUBJECTS.find(s => s.id === q.subjectId);
+                  return (
+                    <div key={q.id} className="glass-panel p-5 rounded-2xl hover-glow transition-all">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[#00d4ff] font-bold text-lg">{q.title}</span>
+                          <span className="badge badge-blue text-xs">{sub ? sub.name : q.subjectId}</span>
+                        </div>
+                        <span className="text-xs text-gray-500">{q.createdAt?.toDate ? q.createdAt.toDate().toLocaleString('uz-UZ') : ''}</span>
+                      </div>
+                      <p className="text-gray-300 text-sm mb-4">{q.body}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <UserCheck size={14} className="text-[#00ff88]" /> Muallif: <span className="text-white font-medium">{q.authorName}</span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
       </main>
 
       {/* ADD TEACHER MODAL */}
@@ -473,7 +557,7 @@ export default function AdminPanel() {
           <div className="modal-box slide-up" style={{ maxWidth: 500, borderColor: '#7c3aed44', boxShadow: '0 0 50px rgba(124,58,237,0.15)' }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-[#7c3aed] flex items-center gap-2"><UserCheck size={20}/> O'qituvchi Ma'lumotlari</h3>
-              <button onClick={() => {setShowTeacherDetails(false); setSelectedTeacher(null); setCredForm({adminPassword:'', newEmail:'', newPassword:''})}} className="btn-secondary p-2 rounded-lg"><X size={16} /></button>
+              <button onClick={() => {setShowTeacherDetails(false); setSelectedTeacher(null); setCredForm({adminPassword:'', newEmail:'', newPassword:''}); setDeleteStep(0); setDeleteAdminPass('');}} className="btn-secondary p-2 rounded-lg"><X size={16} /></button>
             </div>
             
             <div className="mb-6 bg-black/20 p-4 rounded-xl border border-white/5 space-y-2 text-sm">
@@ -508,6 +592,38 @@ export default function AdminPanel() {
                 {credLoading ? "O'zgartirilmoqda (Kuting)..." : "Majburiy O'zgartirish"}
               </button>
             </form>
+
+            {/* DELETE ACCOUNT SECTION */}
+            <div className="mt-8 pt-4 border-t border-red-500/20">
+              <h4 className="font-bold text-red-500 flex items-center gap-2 mb-3"><Activity size={18}/> Xavfli Hudud: Akkauntni O'chirish</h4>
+              {deleteStep === 0 && (
+                <button onClick={() => setDeleteStep(1)} className="btn-secondary w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 border-red-500/20">
+                  Foydalanuvchini Butunlay O'chirish
+                </button>
+              )}
+              {deleteStep === 1 && (
+                <div className="p-4 bg-red-500/10 rounded-xl border border-red-500/30 slide-up">
+                  <p className="text-sm text-red-300 mb-4 text-center">Rostdan ham bu akkauntni o'chirmoqchimisiz? Bu amalni ortga qaytarib bo'lmaydi!</p>
+                  <div className="flex gap-3">
+                    <button onClick={() => setDeleteStep(0)} className="btn-secondary flex-1">Bekor qilish</button>
+                    <button onClick={() => setDeleteStep(2)} className="bg-red-600 text-white rounded-xl flex-1 py-2 font-medium hover:bg-red-500 transition-colors">Ha, O'chirilsin</button>
+                  </div>
+                </div>
+              )}
+              {deleteStep === 2 && (
+                <form onSubmit={handleDeleteUser} className="p-4 bg-red-500/20 rounded-xl border border-red-500/50 slide-up">
+                  <p className="text-xs text-red-300 mb-2 font-bold uppercase tracking-wider text-center">So'nggi Tasdiq (2/2)</p>
+                  <p className="text-xs text-red-200 mb-3 text-center">Tasdiqlash uchun O'zingizning (Admin) parolingizni kiriting:</p>
+                  <input type="password" required value={deleteAdminPass} onChange={e => setDeleteAdminPass(e.target.value)} className="input-field border-red-500/50 mb-4 text-center" placeholder="Admin parolini yozing..." />
+                  <div className="flex gap-3">
+                    <button type="button" onClick={() => {setDeleteStep(0); setDeleteAdminPass('');}} className="btn-secondary flex-1">Bekor qilish</button>
+                    <button type="submit" disabled={deleteLoading} className="bg-red-700 text-white rounded-xl flex-1 py-2 font-bold hover:bg-red-600 transition-colors">
+                      {deleteLoading ? "O'chirilmoqda..." : "BUTUNLAY O'CHIRISH"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       )}
