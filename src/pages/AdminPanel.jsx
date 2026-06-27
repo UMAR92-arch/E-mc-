@@ -245,9 +245,9 @@ export default function AdminPanel() {
   };
 
   const chartAll = generateChart(allUsers);
-  const chartStudents = useMemo(() => processChartData(students), [students]);
-  const chartTeachers = useMemo(() => processChartData(teachers), [teachers]);
-  const chartAdmins = useMemo(() => processChartData(admins), [admins]);
+  const chartStudents = useMemo(() => generateChart(students), [students]);
+  const chartTeachers = useMemo(() => generateChart(teachers), [teachers]);
+  const chartAdmins = useMemo(() => generateChart(admins), [admins]);
 
   return (
     <div className="flex min-h-screen text-gray-200" style={{ background: '#05080f' }}>
