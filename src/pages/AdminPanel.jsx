@@ -366,12 +366,12 @@ export default function AdminPanel() {
             <form onSubmit={handleAddTeacher} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Ism</label>
-                  <input className="input-field" value={tForm.firstName} onChange={e => setTForm({...tForm,firstName:e.target.value})} required placeholder="Alisher..." />
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Ism (Majburiy emas)</label>
+                  <input className="input-field" value={tForm.firstName} onChange={e => setTForm({...tForm,firstName:e.target.value})} placeholder="Alisher..." />
                 </div>
                 <div>
-                  <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Familiya</label>
-                  <input className="input-field" value={tForm.lastName} onChange={e => setTForm({...tForm,lastName:e.target.value})} required placeholder="Navoiy..." />
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Familiya (Majburiy emas)</label>
+                  <input className="input-field" value={tForm.lastName} onChange={e => setTForm({...tForm,lastName:e.target.value})} placeholder="Navoiy..." />
                 </div>
               </div>
               <div>
