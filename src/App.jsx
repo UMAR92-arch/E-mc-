@@ -19,7 +19,7 @@ const SecretAdminBtn = () => {
   const [err, setErr] = useState(false);
 
   // Butunlay yashirish
-  if (location.pathname.startsWith('/admin')) return null;
+  if (location.pathname.startsWith('/admin') || location.pathname === '/login' || location.pathname === '/register') return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
