@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db, storage } from '../firebase/config';
+import { db, storage, auth } from '../firebase/config';
+import { updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from 'firebase/auth';
 import {
   collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, setDoc, getDoc
 } from 'firebase/firestore';
@@ -55,6 +56,7 @@ export default function SubjectPage() {
   // Teacher profile modal
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [pForm, setPForm] = useState({ firstName: userData?.firstName||'', lastName: userData?.lastName||'', age: '', bio: '', telegram: '', phone: '' });
+  const [credForm, setCredForm] = useState({ currentPassword: '', newEmail: userData?.email || '', newPassword: '' });
 
   // Teacher Upload Modals
   const [showUploadModal, setShowUploadModal] = useState(null); // 'video', 'resource', 'doc'
@@ -139,9 +141,47 @@ export default function SubjectPage() {
     e.preventDefault();
     setUploading(true);
     try {
+      // 1. Update basic profile in 'teachers'
       await setDoc(doc(db, 'teachers', currentUser.uid), { ...pForm, subjectId, createdAt: serverTimestamp() }, { merge: true });
+      
+      // 2. Update credentials if provided
+      if (credForm.currentPassword && (credForm.newEmail !== currentUser.email || credForm.newPassword)) {
+        const credential = EmailAuthProvider.credential(currentUser.email, credForm.currentPassword);
+        await reauthenticateWithCredential(currentUser, credential);
+        
+        let newPassToSave = credForm.currentPassword;
+        if (credForm.newEmail !== currentUser.email) {
+          await updateEmail(currentUser, credForm.newEmail);
+        }
+        if (credForm.newPassword) {
+          await updatePassword(currentUser, credForm.newPassword);
+          newPassToSave = credForm.newPassword;
+        }
+        
+        // Update user doc in Firestore
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userDocRef);
+        let passwordHistory = [credForm.currentPassword];
+        if (userSnap.exists() && userSnap.data().passwordHistory) {
+          passwordHistory = [...userSnap.data().passwordHistory, newPassToSave];
+        } else {
+          passwordHistory.push(newPassToSave);
+        }
+        
+        await setDoc(userDocRef, {
+          email: credForm.newEmail,
+          password: newPassToSave,
+          passwordHistory: passwordHistory
+        }, { merge: true });
+      }
+
       setShowProfileModal(false);
-    } catch(e) { console.error(e); }
+      setCredForm({ currentPassword: '', newEmail: currentUser.email, newPassword: '' });
+      alert("Ma'lumotlar saqlandi!");
+    } catch(e) { 
+      console.error(e);
+      alert("Xatolik: " + e.message);
+    }
     setUploading(false);
   };
 
@@ -548,7 +588,26 @@ export default function SubjectPage() {
                 <label className="block text-sm mb-1 text-gray-400">Telefon raqam</label>
                 <input className="input-field" value={pForm.phone} onChange={e=>setPForm({...pForm,phone:e.target.value})} placeholder="+998..." />
               </div>
-              <button type="submit" disabled={uploading} className="btn-primary w-full py-3 mt-2">
+              
+              <div className="border-t border-white/10 pt-4 mt-4">
+                <h4 className="text-[#00d4ff] font-semibold mb-3">Login va Parolni o'zgartirish (Ixtiyoriy)</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs mb-1 text-gray-400">Joriy Parolingiz (O'zgartirish uchun majburiy)</label>
+                    <input type="password" className="input-field" value={credForm.currentPassword} onChange={e=>setCredForm({...credForm,currentPassword:e.target.value})} placeholder="Xavfsizlik uchun..." />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1 text-gray-400">Yangi Login (Email)</label>
+                    <input type="email" className="input-field" value={credForm.newEmail} onChange={e=>setCredForm({...credForm,newEmail:e.target.value})} placeholder="yangi@email.uz" />
+                  </div>
+                  <div>
+                    <label className="block text-xs mb-1 text-gray-400">Yangi Parol</label>
+                    <input type="password" className="input-field" value={credForm.newPassword} onChange={e=>setCredForm({...credForm,newPassword:e.target.value})} minLength={6} placeholder="Kamida 6 belgi..." />
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" disabled={uploading} className="btn-primary w-full py-3 mt-4">
                 {uploading ? 'Saqlanmoqda...' : 'Ma\'lumotlarni Saqlash'}
               </button>
             </form>

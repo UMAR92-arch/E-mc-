@@ -4,7 +4,7 @@ import { db, auth } from '../firebase/config';
 import {
   collection, query, onSnapshot, addDoc, serverTimestamp, doc, setDoc, orderBy, where
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updatePassword, updateEmail } from 'firebase/auth';
 import {
   LayoutDashboard, Users, GraduationCap, BookOpen, ClipboardList,
   Settings, LogOut, Home, Plus, X, TrendingUp, UserCheck, Activity, Search
@@ -75,6 +75,12 @@ export default function AdminPanel() {
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState('');
 
+  // Yangi qo'shilgan state'lar
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [showTeacherDetails, setShowTeacherDetails] = useState(false);
+  const [credForm, setCredForm] = useState({ adminPassword: '', newEmail: '', newPassword: '' });
+  const [credLoading, setCredLoading] = useState(false);
+
   useEffect(() => {
     const unUsers = onSnapshot(collection(db, 'users'), snap => {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -101,7 +107,8 @@ export default function AdminPanel() {
       await setDoc(doc(db, 'users', cred.user.uid), {
         firstName: tForm.firstName, lastName: tForm.lastName,
         role: tForm.role, subject: tForm.subject,
-        email, streak: 0, points: 0, createdAt: serverTimestamp()
+        email, password: tForm.password, passwordHistory: [tForm.password], 
+        streak: 0, points: 0, createdAt: serverTimestamp()
       });
       setTForm({ firstName: '', lastName: '', login: '', password: '', subject: '', role: 'teacher' });
       setShowAddTeacher(false);
@@ -111,6 +118,60 @@ export default function AdminPanel() {
       else notify('❌ Xatolik: ' + err.message);
     }
     setAdding(false);
+  };
+
+  const handleChangeTeacherCreds = async (e) => {
+    e.preventDefault();
+    if (!credForm.adminPassword || !credForm.newEmail || !credForm.newPassword) {
+      return notify("❌ Barcha maydonlarni to'ldiring!");
+    }
+    setCredLoading(true);
+    const adminEmail = auth.currentUser.email;
+    
+    try {
+      // 1. Admin parolini tasdiqlash uchun admin bo'lib qayta kiramiz
+      await signInWithEmailAndPassword(auth, adminEmail, credForm.adminPassword);
+      
+      // 2. O'qituvchining hozirgi paroli bilan uning profiliga yashirincha kiramiz
+      const oldPassword = selectedTeacher.password;
+      if (!oldPassword) throw new Error("O'qituvchining oldingi paroli bazada topilmadi. Parolni o'zgartirib bo'lmaydi.");
+      
+      await signInWithEmailAndPassword(auth, selectedTeacher.email, oldPassword);
+      
+      // 3. O'qituvchining ma'lumotlarini yangilaymiz
+      if (auth.currentUser.email !== credForm.newEmail) {
+        await updateEmail(auth.currentUser, credForm.newEmail);
+      }
+      await updatePassword(auth.currentUser, credForm.newPassword);
+      
+      // 4. Firestore ni yangilaymiz
+      const newHistory = [...(selectedTeacher.passwordHistory || [oldPassword]), credForm.newPassword];
+      await setDoc(doc(db, 'users', selectedTeacher.id), {
+        email: credForm.newEmail,
+        password: credForm.newPassword,
+        passwordHistory: newHistory
+      }, { merge: true });
+      
+      // 5. Adminga qaytamiz
+      await signInWithEmailAndPassword(auth, adminEmail, credForm.adminPassword);
+      
+      notify("✅ Parol va Login muvaffaqiyatli o'zgartirildi!");
+      setShowTeacherDetails(false);
+      setCredForm({ adminPassword: '', newEmail: '', newPassword: '' });
+      setSelectedTeacher(null);
+    } catch (err) {
+      console.error(err);
+      notify("❌ Xatolik: " + err.message);
+      // Xatolik bo'lsa, baribir Adminga qaytishga harakat qilamiz
+      try {
+        if (auth.currentUser?.email !== adminEmail) {
+          await signInWithEmailAndPassword(auth, adminEmail, credForm.adminPassword);
+        }
+      } catch (e) {
+        console.error("Adminga qaytishda xatolik", e);
+      }
+    }
+    setCredLoading(false);
   };
 
   const filteredStudents = students.filter(s =>
@@ -329,7 +390,7 @@ export default function AdminPanel() {
                     {teachers.map(t => {
                       const sub = SUBJECTS.find(s => s.id === t.subject);
                       return (
-                        <tr key={t.id}>
+                        <tr key={t.id} onClick={() => { setSelectedTeacher(t); setShowTeacherDetails(true); }} className="cursor-pointer hover:bg-white/[0.02] transition-colors">
                           <td className="font-medium flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold" style={{ background: 'rgba(124,58,237,0.15)', color: '#7c3aed' }}>
                               {t.firstName?.[0]?.toUpperCase()||'O'}
@@ -398,6 +459,51 @@ export default function AdminPanel() {
               </div>
               <button type="submit" disabled={adding} className="btn-primary w-full py-3 mt-2" style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', border: 'none' }}>
                 {adding ? 'Saqlanmoqda...' : "Ma'lumotlarni Saqlash"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* TEACHER DETAILS MODAL */}
+      {showTeacherDetails && selectedTeacher && (
+        <div className="modal-overlay">
+          <div className="modal-box slide-up" style={{ maxWidth: 500, borderColor: '#7c3aed44', boxShadow: '0 0 50px rgba(124,58,237,0.15)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-[#7c3aed] flex items-center gap-2"><UserCheck size={20}/> O'qituvchi Ma'lumotlari</h3>
+              <button onClick={() => {setShowTeacherDetails(false); setSelectedTeacher(null); setCredForm({adminPassword:'', newEmail:'', newPassword:''})}} className="btn-secondary p-2 rounded-lg"><X size={16} /></button>
+            </div>
+            
+            <div className="mb-6 bg-black/20 p-4 rounded-xl border border-white/5 space-y-2 text-sm">
+              <p><span className="text-gray-400">Ism:</span> {selectedTeacher.firstName} {selectedTeacher.lastName}</p>
+              <p><span className="text-gray-400">Joriy Login (Email):</span> <span className="text-[#00d4ff] font-mono">{selectedTeacher.email}</span></p>
+              <p><span className="text-gray-400">Joriy Parol:</span> <span className="text-[#00ff88] font-mono">{selectedTeacher.password || "Kiritilmagan/Eski"}</span></p>
+              <div>
+                <span className="text-gray-400 block mb-1">Parollar Tarixi:</span>
+                <div className="flex flex-wrap gap-2">
+                  {selectedTeacher.passwordHistory?.map((p, i) => (
+                     <span key={i} className="px-2 py-1 bg-white/5 rounded text-xs font-mono border border-white/10">{p}</span>
+                  )) || <span className="text-xs text-gray-500">Tarix yo'q</span>}
+                </div>
+              </div>
+            </div>
+
+            <h4 className="font-bold text-red-400 mb-3 border-b border-red-500/20 pb-2">Parol va Loginni Majburiy O'zgartirish</h4>
+            <form onSubmit={handleChangeTeacherCreds} className="space-y-4">
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>O'qituvchining Yangi Logini (Emaili)</label>
+                <input className="input-field" value={credForm.newEmail} onChange={e => setCredForm({...credForm,newEmail:e.target.value})} required placeholder="yangi@ilmfan.uz" />
+              </div>
+              <div>
+                <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>O'qituvchining Yangi Paroli</label>
+                <input type="password" className="input-field" value={credForm.newPassword} onChange={e => setCredForm({...credForm,newPassword:e.target.value})} required minLength={6} placeholder="Yangi parol..." />
+              </div>
+              <div className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                <label className="block text-xs mb-2 text-red-300">XAVFSIZLIK: O'zgartirishni tasdiqlash uchun *Sizning* (Admin) parolingiz:</label>
+                <input type="password" className="input-field border-red-500/30 focus:border-red-500" value={credForm.adminPassword} onChange={e => setCredForm({...credForm,adminPassword:e.target.value})} required placeholder="Admin paroli..." />
+              </div>
+              <button type="submit" disabled={credLoading} className="w-full py-3 mt-2 rounded-xl text-white font-medium transition-all" style={{ background: credLoading ? '#333' : 'linear-gradient(135deg, #ef4444, #b91c1c)' }}>
+                {credLoading ? "O'zgartirilmoqda (Kuting)..." : "Majburiy O'zgartirish"}
               </button>
             </form>
           </div>
