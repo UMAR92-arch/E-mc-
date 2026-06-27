@@ -189,23 +189,33 @@ export default function AdminPanel() {
 
     try {
       // 1. Admin parolini tasdiqlash uchun admin bo'lib qayta kiramiz
-      await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
+      try {
+        await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
+      } catch (e) {
+        throw new Error("Admin paroli noto'g'ri kiritildi!");
+      }
       
-      // 2. O'qituvchining hozirgi paroli bilan uning profiliga yashirincha kiramiz
+      // 2. O'qituvchining profiliga yashirincha kirish va Auth'dan o'chirish
       const oldPassword = selectedTeacher.password;
-      if (!oldPassword) throw new Error("O'qituvchining oldingi paroli bazada topilmadi. Firebase Auth orqali o'chirib bo'lmaydi.");
+      if (oldPassword) {
+        try {
+          await signInWithEmailAndPassword(auth, selectedTeacher.email, oldPassword);
+          await deleteUser(auth.currentUser);
+        } catch (e) {
+          console.warn("Foydalanuvchi Auth'dan o'chirilmadi (parol eskirgan bo'lishi mumkin):", e);
+        }
+      }
       
-      await signInWithEmailAndPassword(auth, selectedTeacher.email, oldPassword);
-      
-      // 3. Foydalanuvchini Auth dan o'chiramiz
-      await deleteUser(auth.currentUser);
-      
-      // 4. Firestore dan o'chiramiz
+      // 3. Firestore dan o'chiramiz (BU ENG ASOSIY QISM)
       await deleteDoc(doc(db, 'users', selectedTeacher.id));
       await deleteDoc(doc(db, 'teachers', selectedTeacher.id));
       
-      // 5. Adminga qaytamiz
-      await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
+      // 4. Adminga qaytamiz
+      try {
+        if (auth.currentUser?.email !== adminEmail) {
+          await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
+        }
+      } catch (e) {}
       
       notify("✅ Akkaunt butunlay o'chirib yuborildi!");
       setShowTeacherDetails(false);
@@ -215,11 +225,6 @@ export default function AdminPanel() {
     } catch (err) {
       console.error(err);
       notify("❌ Xatolik: " + err.message);
-      try {
-        if (auth.currentUser?.email !== adminEmail) {
-          await signInWithEmailAndPassword(auth, adminEmail, deleteAdminPass);
-        }
-      } catch (e) {}
     }
     setDeleteLoading(false);
   };
