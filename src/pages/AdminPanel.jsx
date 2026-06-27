@@ -15,6 +15,7 @@ const SIDEBAR = [
   { id: 'dashboard',  label: 'Bosh Oyna',     icon: <LayoutDashboard size={16} /> },
   { id: 'students',   label: "O'quvchilar",   icon: <GraduationCap size={16} /> },
   { id: 'teachers',   label: "O'qituvchilar", icon: <Users size={16} /> },
+  { id: 'admins',     label: 'Adminlar',      icon: <Settings size={16} /> },
   { id: 'subjects',   label: 'Fanlar',        icon: <BookOpen size={16} /> },
   { id: 'questions',  label: 'Savollar',       icon: <ClipboardList size={16} /> },
 ];
@@ -66,6 +67,7 @@ export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [admins, setAdmins] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [questions, setQuestions] = useState([]);
   
@@ -90,7 +92,8 @@ export default function AdminPanel() {
       const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setAllUsers(all);
       setStudents(all.filter(u => u.role === 'student'));
-      setTeachers(all.filter(u => u.role === 'teacher' || u.role === 'admin'));
+      setTeachers(all.filter(u => u.role === 'teacher'));
+      setAdmins(all.filter(u => u.role === 'admin'));
     });
     const unQ = onSnapshot(collection(db, 'questions'), snap => {
       const allQ = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -242,8 +245,9 @@ export default function AdminPanel() {
   };
 
   const chartAll = generateChart(allUsers);
-  const chartStudents = generateChart(students);
-  const chartTeachers = generateChart(teachers);
+  const chartStudents = useMemo(() => processChartData(students), [students]);
+  const chartTeachers = useMemo(() => processChartData(teachers), [teachers]);
+  const chartAdmins = useMemo(() => processChartData(admins), [admins]);
 
   return (
     <div className="flex min-h-screen text-gray-200" style={{ background: '#05080f' }}>
@@ -410,7 +414,7 @@ export default function AdminPanel() {
                 <h2 className="text-3xl font-bold gradient-text-purple mb-1" style={{ fontFamily: 'Space Grotesk' }}>O'qituvchilar Bazasi</h2>
                 <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Jami: {teachers.length} ta o'qituvchi ({allUsers.length ? Math.round(teachers.length/allUsers.length*100) : 0}%)</p>
               </div>
-              <button onClick={() => setShowAddTeacher(true)} className="btn-primary flex items-center gap-2" style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', border: 'none' }}>
+              <button onClick={() => { setTForm({...tForm, role: 'teacher'}); setShowAddTeacher(true); }} className="btn-primary flex items-center gap-2" style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', border: 'none' }}>
                 <Plus size={18} /> Yangi O'qituvchi Qo'shish
               </button>
             </div>
@@ -461,6 +465,58 @@ export default function AdminPanel() {
           </div>
         )}
 
+        {/* ADMINS */}
+        {activeTab === 'admins' && (
+          <div className="fade-in-up">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-3xl font-bold gradient-text mb-1" style={{ fontFamily: 'Space Grotesk', color: '#ef4444' }}>Adminlar Bazasi</h2>
+                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Jami: {admins.length} ta admin ({allUsers.length ? Math.round(admins.length/allUsers.length*100) : 0}%)</p>
+              </div>
+              <button onClick={() => { setTForm({...tForm, role: 'admin'}); setShowAddTeacher(true); }} className="btn-primary flex items-center gap-2" style={{ background: 'linear-gradient(135deg, #ef4444, #b91c1c)', border: 'none' }}>
+                <Plus size={18} /> Yangi Admin Qo'shish
+              </button>
+            </div>
+
+            <div className="glass-panel rounded-2xl p-6 mb-8 hover-glow">
+              <h3 className="font-bold text-white mb-4 flex items-center gap-2"><Activity className="text-red-500"/> Adminlar ro'yxatdan o'tish dinamikasi</h3>
+              <div className="w-full bg-black/30 rounded-xl p-4 border border-white/5">
+                <MiniChart data={chartAdmins} color="#ef4444" />
+              </div>
+            </div>
+
+            <div className="glass-panel rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="data-table w-full text-left">
+                  <thead>
+                    <tr>
+                      <th>Ism va Familiya</th>
+                      <th>Login (Email)</th>
+                      <th>Huquq</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {admins.map(t => (
+                      <tr key={t.id} onClick={() => { setSelectedTeacher(t); setShowTeacherDetails(true); }} className="cursor-pointer hover:bg-white/[0.02] transition-colors">
+                        <td className="font-medium flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+                            {t.firstName?.[0]?.toUpperCase()||'A'}
+                          </div>
+                          {t.firstName} {t.lastName}
+                        </td>
+                        <td style={{ color: 'var(--text-muted)' }}>{t.email}</td>
+                        <td>
+                          <span className="badge badge-red">ADMIN</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* QUESTIONS */}
         {activeTab === 'questions' && (
           <div className="fade-in-up">
@@ -500,12 +556,14 @@ export default function AdminPanel() {
 
       </main>
 
-      {/* ADD TEACHER MODAL */}
+      {/* ADD USER MODAL */}
       {showAddTeacher && (
         <div className="modal-overlay">
-          <div className="modal-box slide-up" style={{ maxWidth: 500, borderColor: '#7c3aed44', boxShadow: '0 0 50px rgba(124,58,237,0.15)' }}>
+          <div className="modal-box slide-up" style={{ maxWidth: 500, borderColor: tForm.role === 'admin' ? '#ef444444' : '#7c3aed44', boxShadow: tForm.role === 'admin' ? '0 0 50px rgba(239,68,68,0.15)' : '0 0 50px rgba(124,58,237,0.15)' }}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-[#7c3aed] flex items-center gap-2"><UserCheck size={20}/> Yangi O'qituvchi Qo'shish</h3>
+              <h3 className={`text-xl font-bold flex items-center gap-2 ${tForm.role === 'admin' ? 'text-red-500' : 'text-[#7c3aed]'}`}>
+                <UserCheck size={20}/> {tForm.role === 'admin' ? "Yangi Admin Qo'shish" : "Yangi O'qituvchi Qo'shish"}
+              </h3>
               <button onClick={() => setShowAddTeacher(false)} className="btn-secondary p-2 rounded-lg"><X size={16} /></button>
             </div>
             <form onSubmit={handleAddTeacher} className="space-y-4">
@@ -536,14 +594,7 @@ export default function AdminPanel() {
                   </select>
                 </div>
               )}
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Foydalanuvchi Roli</label>
-                <select className="input-field" value={tForm.role} onChange={e => setTForm({...tForm,role:e.target.value})}>
-                  <option value="teacher">Oddiy O'qituvchi</option>
-                  <option value="admin">Tizim Administratori (Admin)</option>
-                </select>
-              </div>
-              <button type="submit" disabled={adding} className="btn-primary w-full py-3 mt-2" style={{ background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', border: 'none' }}>
+              <button type="submit" disabled={adding} className="btn-primary w-full py-3 mt-4" style={{ background: tForm.role === 'admin' ? 'linear-gradient(135deg, #ef4444, #b91c1c)' : 'linear-gradient(135deg, #7c3aed, #5b21b6)', border: 'none' }}>
                 {adding ? 'Saqlanmoqda...' : "Ma'lumotlarni Saqlash"}
               </button>
             </form>
