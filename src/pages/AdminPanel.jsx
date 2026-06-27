@@ -106,7 +106,7 @@ export default function AdminPanel() {
       const cred = await createUserWithEmailAndPassword(auth, email, tForm.password);
       await setDoc(doc(db, 'users', cred.user.uid), {
         firstName: tForm.firstName, lastName: tForm.lastName,
-        role: tForm.role, subject: tForm.subject,
+        role: tForm.role, subject: tForm.role === 'admin' ? '' : tForm.subject,
         email, password: tForm.password, passwordHistory: [tForm.password], 
         streak: 0, points: 0, createdAt: serverTimestamp()
       });
@@ -443,13 +443,15 @@ export default function AdminPanel() {
                 <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Maxfiy Parol (min 6 belgi)</label>
                 <input type="password" className="input-field" value={tForm.password} onChange={e => setTForm({...tForm,password:e.target.value})} required minLength={6} placeholder="••••••••" />
               </div>
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Biriktiriladigan Fan</label>
-                <select className="input-field" value={tForm.subject} onChange={e => setTForm({...tForm,subject:e.target.value})} required>
-                  <option value="">Fanni tanlang...</option>
-                  {SUBJECTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
+              {tForm.role !== 'admin' && (
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Biriktiriladigan Fan</label>
+                  <select className="input-field" value={tForm.subject} onChange={e => setTForm({...tForm,subject:e.target.value})} required>
+                    <option value="">Fanni tanlang...</option>
+                    {SUBJECTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs mb-1" style={{ color: 'var(--text-secondary)' }}>Foydalanuvchi Roli</label>
                 <select className="input-field" value={tForm.role} onChange={e => setTForm({...tForm,role:e.target.value})}>
